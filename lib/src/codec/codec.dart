@@ -12,15 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:convert';
 import 'dart:typed_data';
 
-/// A binary codec for [T].
-abstract class BinaryCodec<T> {
+/// A [Codec] between [S] and [Uint8List].
+abstract class BinaryCodec<S> extends Codec<S, Uint8List> {
   const BinaryCodec();
-
-  /// Decode the [data] to [T].
-  T decode(Uint8List data);
-
-  /// Encode the [msg] to [Uint8List].
-  Uint8List encode(T msg);
 }

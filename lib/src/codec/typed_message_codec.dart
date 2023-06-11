@@ -21,40 +21,63 @@ import 'codec.dart';
 /// A binary codec for [TypedMessage] which encodes the [TypedMessage.message]
 /// using JSON. [Null] message will be ignored.
 class JSONTypedMessageBinaryCodec extends BinaryCodec<TypedMessage<dynamic>> {
+  @override
+  final Converter<TypedMessage, Uint8List> encoder;
+
+  @override
+  final Converter<Uint8List, TypedMessage> decoder;
+
+  JSONTypedMessageBinaryCodec({int typeLength = 1})
+      : assert(typeLength >= 1 && typeLength <= 8),
+        encoder = _JSONTypedMessageBinaryEncoder(typeLength: typeLength),
+        decoder = _JSONTypedMessageBinaryDecoder(typeLength: typeLength);
+}
+
+class _JSONTypedMessageBinaryEncoder
+    extends Converter<TypedMessage, Uint8List> {
   final int typeLength;
 
-  const JSONTypedMessageBinaryCodec({this.typeLength = 1})
+  const _JSONTypedMessageBinaryEncoder({this.typeLength = 1})
       : assert(typeLength >= 1 && typeLength <= 8);
 
   @override
-  TypedMessage decode(Uint8List data) {
-    var type = 0;
-
-    // Extract type.
-    for (var i = 0; i < typeLength; i++) {
-      type |= data[i] << (8 * (typeLength - i - 1));
-    }
-
-    return TypedMessage(
-      type,
-      data.length == typeLength
-          ? null
-          : jsonDecode(utf8.decode(data.sublist(typeLength))),
-    );
-  }
-
-  @override
-  Uint8List encode(TypedMessage msg) {
-    final messageEncoded =
-        msg.message == null ? <int>[] : utf8.encode(jsonEncode(msg.message));
+  Uint8List convert(TypedMessage input) {
+    final messageEncoded = input.message == null
+        ? <int>[]
+        : utf8.encode(jsonEncode(input.message));
     final encoded = Uint8List(typeLength + messageEncoded.length)
       ..setAll(typeLength, messageEncoded);
 
     // Fill the type.
     for (var i = 0; i < typeLength; i++) {
-      encoded[typeLength - i - 1] = msg.type >> (8 * i);
+      encoded[typeLength - i - 1] = input.type >> (8 * i);
     }
 
     return encoded;
+  }
+}
+
+class _JSONTypedMessageBinaryDecoder
+    extends Converter<Uint8List, TypedMessage> {
+  final int typeLength;
+
+  const _JSONTypedMessageBinaryDecoder({this.typeLength = 1})
+      : assert(typeLength >= 1 && typeLength <= 8);
+
+  @override
+  TypedMessage convert(Uint8List input) {
+    var type = 0;
+
+    // Extract type.
+    for (var i = 0; i < typeLength; i++) {
+      type |= input[i] << (8 * (typeLength - i - 1));
+    }
+
+    return TypedMessage(
+      type,
+      input.length == typeLength
+          ? null
+          : jsonDecode(utf8.decode(input.sublist(typeLength))),
+    );
   }
 }
