@@ -18,33 +18,48 @@ import 'dart:typed_data';
 import '../message/typed_message.dart';
 import 'codec.dart';
 
-/// A binary codec for [TypedMessage] which encodes the [TypedMessage.message]
-/// using JSON. [Null] message will be ignored.
-class JSONTypedMessageBinaryCodec extends BinaryCodec<TypedMessage<dynamic>> {
-  @override
-  final Converter<TypedMessage, Uint8List> encoder;
+/// A binary codec for [TypedMessage] that encodes the [TypedMessage.message]
+/// using [messageCodec] (json+utf8 by default). [Null] message will be ignored.
+class TypedMessageBinaryCodec<T> extends BinaryCodec<TypedMessage<T>> {
+  final Codec<dynamic, List<int>> messageCodec;
 
   @override
-  final Converter<Uint8List, TypedMessage> decoder;
+  late final Converter<TypedMessage<T>, Uint8List> encoder;
 
-  JSONTypedMessageBinaryCodec({int typeLength = 1})
-      : assert(typeLength >= 1 && typeLength <= 8),
-        encoder = _JSONTypedMessageBinaryEncoder(typeLength: typeLength),
-        decoder = _JSONTypedMessageBinaryDecoder(typeLength: typeLength);
+  @override
+  late final Converter<Uint8List, TypedMessage<T>> decoder;
+
+  TypedMessageBinaryCodec({
+    int typeLength = 1,
+    Codec<dynamic, List<int>>? messageCodec,
+  })  : assert(typeLength >= 1 && typeLength <= 8),
+        messageCodec = messageCodec ?? json.fuse(utf8) {
+    encoder = _TypedMessageBinaryEncoder(
+      typeLength: typeLength,
+      messageEncoder: this.messageCodec.encoder,
+    );
+    decoder = _TypedMessageBinaryDecoder(
+      typeLength: typeLength,
+      messageDecoder: this.messageCodec.decoder,
+    );
+  }
 }
 
-class _JSONTypedMessageBinaryEncoder
-    extends Converter<TypedMessage, Uint8List> {
+class _TypedMessageBinaryEncoder<T>
+    extends Converter<TypedMessage<T>, Uint8List> {
   final int typeLength;
+  final Converter<dynamic, List<int>> messageEncoder;
 
-  const _JSONTypedMessageBinaryEncoder({this.typeLength = 1})
-      : assert(typeLength >= 1 && typeLength <= 8);
+  _TypedMessageBinaryEncoder({
+    this.typeLength = 1,
+    Converter<dynamic, List<int>>? messageEncoder,
+  })  : assert(typeLength >= 1 && typeLength <= 8),
+        messageEncoder = messageEncoder ?? json.fuse(utf8).encoder;
 
   @override
-  Uint8List convert(TypedMessage input) {
-    final messageEncoded = input.message == null
-        ? <int>[]
-        : utf8.encode(jsonEncode(input.message));
+  Uint8List convert(TypedMessage<T> input) {
+    final messageEncoded =
+        input.message == null ? <int>[] : messageEncoder.convert(input.message);
     final encoded = Uint8List(typeLength + messageEncoded.length)
       ..setAll(typeLength, messageEncoded);
 
@@ -57,15 +72,19 @@ class _JSONTypedMessageBinaryEncoder
   }
 }
 
-class _JSONTypedMessageBinaryDecoder
-    extends Converter<Uint8List, TypedMessage> {
+class _TypedMessageBinaryDecoder<T>
+    extends Converter<Uint8List, TypedMessage<T>> {
   final int typeLength;
+  final Converter<List<int>, dynamic> messageDecoder;
 
-  const _JSONTypedMessageBinaryDecoder({this.typeLength = 1})
-      : assert(typeLength >= 1 && typeLength <= 8);
+  _TypedMessageBinaryDecoder({
+    this.typeLength = 1,
+    Converter<List<int>, dynamic>? messageDecoder,
+  })  : assert(typeLength >= 1 && typeLength <= 8),
+        messageDecoder = messageDecoder ?? json.fuse(utf8).decoder;
 
   @override
-  TypedMessage convert(Uint8List input) {
+  TypedMessage<T> convert(Uint8List input) {
     var type = 0;
 
     // Extract type.
@@ -77,7 +96,7 @@ class _JSONTypedMessageBinaryDecoder
       type,
       input.length == typeLength
           ? null
-          : jsonDecode(utf8.decode(input.sublist(typeLength))),
+          : messageDecoder.convert(input.sublist(typeLength)),
     );
   }
 }
